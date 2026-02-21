@@ -1,18 +1,19 @@
 -- ============================================================
 -- Muscle Up Tracker — Database Schema
 -- PostgreSQL 16+
+-- Uses prefixed table names to share DB with Handstand
 -- ============================================================
 
 -- Sessions table (required by connect-pg-simple)
-CREATE TABLE IF NOT EXISTS "session" (
+CREATE TABLE IF NOT EXISTS "muscleup_session" (
   "sid" VARCHAR NOT NULL PRIMARY KEY,
   "sess" JSON NOT NULL,
   "expire" TIMESTAMP(6) NOT NULL
 );
-CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
+CREATE INDEX IF NOT EXISTS "IDX_muscleup_session_expire" ON "muscleup_session" ("expire");
 
 -- Users
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS muscleup_users (
   id SERIAL PRIMARY KEY,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
@@ -24,9 +25,9 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Progress logs — one row per exercise per session
-CREATE TABLE IF NOT EXISTS progress_logs (
+CREATE TABLE IF NOT EXISTS muscleup_progress_logs (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES muscleup_users(id) ON DELETE CASCADE,
   level INTEGER NOT NULL CHECK (level BETWEEN 1 AND 6),
   exercise_key VARCHAR(50) NOT NULL,
   sets_completed INTEGER DEFAULT 0,
@@ -36,25 +37,25 @@ CREATE TABLE IF NOT EXISTS progress_logs (
   session_date DATE DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_progress_user_date ON progress_logs(user_id, session_date DESC);
+CREATE INDEX IF NOT EXISTS idx_muscleup_progress_user_date ON muscleup_progress_logs(user_id, session_date DESC);
 
 -- Graduation records
-CREATE TABLE IF NOT EXISTS graduations (
+CREATE TABLE IF NOT EXISTS muscleup_graduations (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES muscleup_users(id) ON DELETE CASCADE,
   level INTEGER NOT NULL CHECK (level BETWEEN 1 AND 6),
   graduated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id, level)
 );
 
 -- One-time tokens: set-password (from email link) and reset-password (forgot password)
-CREATE TABLE IF NOT EXISTS password_tokens (
+CREATE TABLE IF NOT EXISTS muscleup_password_tokens (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES muscleup_users(id) ON DELETE CASCADE,
   token_hash VARCHAR(64) NOT NULL,
   type VARCHAR(20) NOT NULL CHECK (type IN ('set_password', 'reset_password')),
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_password_tokens_user_type ON password_tokens (user_id, type);
-CREATE INDEX IF NOT EXISTS idx_password_tokens_expires ON password_tokens (expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_muscleup_password_tokens_user_type ON muscleup_password_tokens (user_id, type);
+CREATE INDEX IF NOT EXISTS idx_muscleup_password_tokens_expires ON muscleup_password_tokens(expires_at);

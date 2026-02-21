@@ -61,7 +61,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Sessions
 app.use(session({
-  store: new pgSession({ pool, tableName: 'session', createTableIfMissing: true }),
+  store: new pgSession({ pool, tableName: 'muscleup_session', createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET || 'muscleup-dev-secret-change-me',
   resave: false,
   saveUninitialized: false,
