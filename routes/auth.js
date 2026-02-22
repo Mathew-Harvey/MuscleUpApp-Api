@@ -438,5 +438,14 @@ module.exports = function (pool) {
     }
   });
 
+  // Verify session for ebook access - returns ok if user is authenticated
+  router.get('/api/verify-session', (req, res) => {
+    if (req.session && req.session.userId) {
+      res.json({ verified: true, userId: req.session.userId });
+    } else {
+      res.status(401).json({ verified: false, error: 'Not authenticated' });
+    }
+  });
+
   return router;
 };
