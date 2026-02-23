@@ -27,7 +27,7 @@ const LEVELS = [
     num: 3, title: 'False Grip Integration', subtitle: 'False grip pull-ups, ring dips with turn out, and bent arm holds',
     exercises: [
       { key: 'wrist_warmup_3', name: 'Wrist Warm-Up + False Grip Prep', rx: '10 circles + 10 false grip squeezes', video: 'https://www.youtube.com/watch?v=Uo4qAzodPlM&t=141', videos: ['https://www.youtube.com/watch?v=Uo4qAzodPlM&t=141', 'https://www.youtube.com/watch?v=fPrirk5JELI&t=15'] },
-      { key: 'false_grip_pullups', name: 'False Grip Pull-Ups', rx: '3–6 reps · 4–5 sets', video: 'https://www.youtube.com/watch?v=UfTMr6GHCRA' },
+      { key: 'false_grip_pullups', name: 'False Grip Pull-Ups', rx: '3–6 reps · 4–5 sets', video: 'https://www.youtube.com/watch?v=5R07lItt9EY&t=36' },
       { key: 'ring_dips', name: 'Ring Dips (Turnout at Top)', rx: '6–10 reps · 3–5 sets', video: 'https://www.youtube.com/watch?v=wf8tAi6sfps&t=22' },
       { key: 'false_grip_rows', name: 'False Grip Ring Rows', rx: '8–10 reps · 3 sets', video: 'https://www.youtube.com/watch?v=wC5LeDNJ1ro&t=12' },
       { key: 'bent_arm_hold', name: 'Bent Arm Hold (Bottom of Dip)', rx: 'Hold 10 sec · 3–5 sets', hasTimer: true },
@@ -39,9 +39,9 @@ const LEVELS = [
     num: 4, title: 'Eccentric Control', subtitle: 'Tempo negative muscle ups — learning the full movement pattern under load',
     exercises: [
       { key: 'wrist_warmup_4', name: 'Wrist Warm-Up + Mobility', rx: '10 circles + 1 min false grip hang', video: 'https://www.youtube.com/watch?v=Uo4qAzodPlM&t=141', videos: ['https://www.youtube.com/watch?v=Uo4qAzodPlM&t=141', 'https://www.youtube.com/watch?v=fPrirk5JELI&t=15'], hasTimer: true },
-      { key: 'false_grip_pullups_4', name: 'False Grip Pull-Ups (Chest to Rings)', rx: '4–6 reps · 4 sets', video: 'https://www.youtube.com/watch?v=UfTMr6GHCRA' },
+      { key: 'false_grip_pullups_4', name: 'False Grip Pull-Ups (Chest to Rings)', rx: '4–6 reps · 4 sets', video: 'https://www.youtube.com/watch?v=5R07lItt9EY&t=36' },
       { key: 'negative_muscle_ups', name: 'Negative Muscle Ups (5-sec Descent)', rx: '3–5 reps · 3–4 sets', video: 'https://www.youtube.com/watch?v=vSv_TOU3fhk&t=18' },
-      { key: 'deep_ring_dips', name: 'Deep Ring Dips', rx: '6–8 reps · 3 sets', video: 'https://www.youtube.com/watch?v=J0GKrCOOIx0' },
+      { key: 'deep_ring_dips', name: 'Deep Ring Dips', rx: '6–8 reps · 3 sets', video: 'https://www.youtube.com/watch?v=_jvFrH_2wyw' },
       { key: 'russian_dips', name: 'Russian Dips', rx: '4–6 reps · 3 sets', video: 'https://www.youtube.com/watch?v=vSv_TOU3fhk&t=18' },
     ],
     graduation: 'Complete 3 controlled 5-second negative muscle ups (from support to dead hang, smooth and controlled through the transition).'
@@ -50,10 +50,10 @@ const LEVELS = [
     num: 5, title: 'First Muscle Up', subtitle: 'Putting it all together. Your first clean, strict ring muscle up',
     exercises: [
       { key: 'wrist_warmup_5', name: 'Wrist Warm-Up + False Grip Prep', rx: '10 circles + 30 sec false grip hang', video: 'https://www.youtube.com/watch?v=Uo4qAzodPlM&t=141', videos: ['https://www.youtube.com/watch?v=Uo4qAzodPlM&t=141', 'https://www.youtube.com/watch?v=fPrirk5JELI&t=15'], hasTimer: true },
-      { key: 'false_grip_pull_high', name: 'False Grip Pull to Chest', rx: '3–5 reps (pull as high as possible) · 4 sets', video: 'https://www.youtube.com/watch?v=UfTMr6GHCRA' },
+      { key: 'false_grip_pull_high', name: 'False Grip Pull to Chest', rx: '3–5 reps (pull as high as possible) · 4 sets', video: 'https://www.youtube.com/watch?v=5R07lItt9EY&t=36' },
       { key: 'muscle_up_attempts', name: 'Muscle Up Attempts', rx: '5–10 attempts with full intent · rest 2 min between', video: 'https://www.youtube.com/watch?v=1_CIqS7CfwE' },
       { key: 'transition_catch', name: 'Low Ring Muscle Up (Use Feet to Help)', rx: '5–8 reps · 3 sets', video: 'https://www.youtube.com/watch?v=ZCd3HbMWrGw' },
-      { key: 'deep_dips_5', name: 'Deep Ring Dips', rx: '8–10 reps · 3 sets', video: 'https://www.youtube.com/watch?v=J0GKrCOOIx0' },
+      { key: 'deep_dips_5', name: 'Deep Ring Dips', rx: '8–10 reps · 3 sets', video: 'https://www.youtube.com/watch?v=_jvFrH_2wyw' },
     ],
     graduation: 'Record 1 clean, strict ring muscle up on video. Minimal hip pike, no kipping, no swinging. The pull, transition, and press to support should be controlled.'
   },
