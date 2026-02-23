@@ -31,7 +31,7 @@ const LEVELS = [
       { key: 'ring_dips', name: 'Ring Dips (Turnout at Top)', rx: '6–10 reps · 3–5 sets', video: 'https://www.youtube.com/watch?v=wf8tAi6sfps&t=22' },
       { key: 'false_grip_rows', name: 'False Grip Ring Rows', rx: '8–10 reps · 3 sets', video: 'https://www.youtube.com/watch?v=wC5LeDNJ1ro&t=12' },
       { key: 'bent_arm_hold', name: 'Bent Arm Hold (Bottom of Dip)', rx: 'Hold 10 sec · 3–5 sets', hasTimer: true },
-      { key: 'ring_support_turnout', name: 'Ring Support with Full Turnout', rx: '30 sec hold · 3 sets', hasTimer: true },
+      { key: 'ring_support_turnout', name: 'Ring Support with Full Turnout', rx: '30 sec hold · 3 sets', video: 'https://www.youtube.com/watch?v=KyvLK70-U-0&t=111', hasTimer: true },
     ],
     graduation: 'Complete: 5 false grip pull-ups, 8 ring dips (with turnout), and 3 × 10-second bent arm holds at bottom of dip position. All in one session.'
   },
@@ -49,7 +49,7 @@ const LEVELS = [
   {
     num: 5, title: 'First Muscle Up', subtitle: 'Putting it all together. Your first clean, strict ring muscle up',
     exercises: [
-      { key: 'wrist_warmup_5', name: 'Wrist Warm-Up + False Grip Prep', rx: '10 circles + 30 sec false grip hang', video: 'https://www.youtube.com/watch?v=fPrirk5JELI&t=15', hasTimer: true },
+      { key: 'wrist_warmup_5', name: 'Wrist Warm-Up + False Grip Prep', rx: '10 circles + 30 sec false grip hang', video: 'https://www.youtube.com/watch?v=Uo4qAzodPlM&t=141', videos: ['https://www.youtube.com/watch?v=Uo4qAzodPlM&t=141', 'https://www.youtube.com/watch?v=fPrirk5JELI&t=15'], hasTimer: true },
       { key: 'false_grip_pull_high', name: 'False Grip Pull to Chest', rx: '3–5 reps (pull as high as possible) · 4 sets', video: 'https://www.youtube.com/watch?v=UfTMr6GHCRA' },
       { key: 'muscle_up_attempts', name: 'Muscle Up Attempts', rx: '5–10 attempts with full intent · rest 2 min between', video: 'https://www.youtube.com/watch?v=1_CIqS7CfwE' },
       { key: 'transition_catch', name: 'Low Ring Muscle Up (Use Feet to Help)', rx: '5–8 reps · 3 sets', video: 'https://www.youtube.com/watch?v=ZCd3HbMWrGw' },
