@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "dashboard": "node dashboard-server.js",
+    "dashboard:dev": "node --watch dashboard-server.js",
     "test": "jest --coverage --testTimeout=30000",
     "test:watch": "jest --watch"
   },
