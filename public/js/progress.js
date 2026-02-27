@@ -38,151 +38,19 @@ function pdExName(key) {
   return PD_EXERCISE_NAMES[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-/* ── Seeded PRNG (Mulberry32) ── */
-
-function pdMulberry32(a) {
-  return function () {
-    a |= 0; a = a + 0x6D2B79F5 | 0;
-    let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-
-/* ── ISO Week helper ── */
-
-function pdGetISOWeek(d) {
-  const date = new Date(d.valueOf());
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
-  const week1 = new Date(date.getFullYear(), 0, 4);
-  return 1 + Math.round(((date - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
-}
-
-/* ── Mock Data ── */
-
-function pdGenerateMockStats(dashboard) {
-  const rng = pdMulberry32(42);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  // Heatmap: 182 days
-  const heatmap = [];
-  for (let i = 181; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const monthsAgo = i / 30;
-    const bias = Math.max(0.3, 1 - monthsAgo * 0.1);
-    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-
-    let count = 0;
-    if (rng() > 0.15) {
-      if (rng() < bias) {
-        count = isWeekend
-          ? Math.floor(rng() * 3) + 4
-          : Math.floor(rng() * 3) + 1 + Math.floor(bias * 2);
-      }
-    }
-    if (i === 0) count = Math.max(count, 1);
-
-    if (count > 0) {
-      heatmap.push({ date: d.toISOString().slice(0, 10), count });
-    }
-  }
-
-  // Weekly volume: 12 weeks
-  const weeklyVolume = [];
-  for (let w = 11; w >= 0; w--) {
-    const weekStart = new Date(today);
-    weekStart.setDate(weekStart.getDate() - w * 7);
-    const year = weekStart.getFullYear();
-    const weekNum = pdGetISOWeek(weekStart);
-    const weekLabel = year + '-W' + String(weekNum).padStart(2, '0');
-
-    let sessions = Math.floor(rng() * 4) + 3;
-    sessions += Math.floor((12 - w) * 0.15);
-    let sets = sessions * (Math.floor(rng() * 4) + 3);
-
-    if (w < 3) {
-      sessions = Math.ceil(sessions * 1.2);
-      sets = Math.ceil(sets * 1.2);
-    }
-
-    weeklyVolume.push({ week: weekLabel, sessions, sets });
-  }
-
-  // Personal bests
-  const personalBests = [
-    { exercise_key: 'ring_dead_hang', best_hold_seconds: 75, best_sets: 5, achieved_at: '2025-11-15' },
-    { exercise_key: 'false_grip_hang', best_hold_seconds: 45, best_sets: 4, achieved_at: '2026-01-10' },
-    { exercise_key: 'ring_support', best_hold_seconds: 60, best_sets: 5, achieved_at: '2025-12-20' },
-    { exercise_key: 'bent_arm_hold', best_hold_seconds: 15, best_sets: 5, achieved_at: '2026-02-05' },
-    { exercise_key: 'ring_support_turnout', best_hold_seconds: 35, best_sets: 3, achieved_at: '2026-01-28' },
-  ];
-
-  // Level timeline from real graduations
-  const maxLevel = 6;
-  const userCreated = dashboard.user.created_at;
-  const levelTimeline = [];
-  for (let l = 1; l <= maxLevel; l++) {
-    const grad = dashboard.graduations.find(g => g.level === l);
-    const prevGrad = dashboard.graduations.find(g => g.level === l - 1);
-    const startedAt = l === 1
-      ? userCreated
-      : (prevGrad ? prevGrad.graduated_at : null);
-
-    levelTimeline.push({
-      level: l,
-      started_at: startedAt ? String(startedAt).slice(0, 10) : null,
-      graduated_at: grad ? String(grad.graduated_at).slice(0, 10) : null,
-    });
-  }
-
-  // Exercise breakdown
-  const exerciseBreakdown = [
-    { exercise_key: 'pull_ups', name: 'Pull-Ups', total_logs: 47 },
-    { exercise_key: 'ring_rows', name: 'Ring Rows', total_logs: 42 },
-    { exercise_key: 'false_grip_pullups', name: 'False Grip Pull-Ups', total_logs: 38 },
-    { exercise_key: 'ring_dips', name: 'Ring Dips', total_logs: 35 },
-    { exercise_key: 'push_ups', name: 'Push-Ups', total_logs: 33 },
-    { exercise_key: 'ring_dead_hang', name: 'Ring Dead Hang', total_logs: 31 },
-    { exercise_key: 'false_grip_hang', name: 'False Grip Hang', total_logs: 28 },
-    { exercise_key: 'scapula_pulls', name: 'Scapula Pull-Ups', total_logs: 25 },
-    { exercise_key: 'ring_support', name: 'Ring Support Hold', total_logs: 22 },
-    { exercise_key: 'bar_dips', name: 'Bar Dips', total_logs: 19 },
-  ];
-
-  const memberSinceDays = Math.max(1, Math.floor((today - new Date(userCreated)) / 86400000));
-  const totalSets = weeklyVolume.reduce((sum, w) => sum + w.sets, 0);
-  const totalLogs = exerciseBreakdown.reduce((sum, e) => sum + e.total_logs, 0);
-
-  return {
-    heatmap,
-    weeklyVolume,
-    personalBests,
-    levelTimeline,
-    exerciseBreakdown,
-    totals: {
-      totalSessions: dashboard.totalSessions || 87,
-      totalSets,
-      totalLogs,
-      memberSinceDays,
-    },
-    streak: {
-      current: dashboard.streak || 12,
-      longest: Math.max(dashboard.streak || 0, 23),
-    },
-  };
-}
-
 /* ── Main Render ── */
 
 async function renderProgress() {
-  const app = document.getElementById('app');
+  var app = document.getElementById('app');
 
-  let dashboard;
+  var dashboard, stats;
   try {
-    dashboard = await api('/dashboard');
+    var results = await Promise.all([
+      api('/dashboard'),
+      api('/dashboard/stats'),
+    ]);
+    dashboard = results[0];
+    stats = results[1];
   } catch (e) {
     app.innerHTML = `
       <div class="auth-prompt">
@@ -193,10 +61,8 @@ async function renderProgress() {
     return;
   }
 
-  const stats = pdGenerateMockStats(dashboard);
-
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const loggedToday = stats.heatmap.some(h => h.date === todayStr && h.count > 0);
+  var todayStr = new Date().toISOString().slice(0, 10);
+  var loggedToday = stats.heatmap.some(function (h) { return h.date === todayStr && h.count > 0; });
 
   app.innerHTML = `
     <div class="pd-container">
@@ -530,13 +396,19 @@ function pdRenderMostPracticed(stats) {
   if (!container) return;
 
   var top5 = stats.exerciseBreakdown.slice(0, 5);
-  var maxCount = top5[0] ? top5[0].total_logs : 1;
+
+  if (!top5.length) {
+    container.innerHTML = '<div class="pd-empty">Log some exercises to see your most practiced! 💪</div>';
+    return;
+  }
+
+  var maxCount = top5[0].total_logs;
 
   container.innerHTML = top5.map(function (ex, i) {
     var pct = Math.round((ex.total_logs / maxCount) * 100);
     return '<div class="pd-practiced-row" style="--delay:' + (i * 0.1) + 's">' +
       '<span class="pd-practiced-rank">' + (i + 1) + '</span>' +
-      '<span class="pd-practiced-name">' + esc(ex.name || pdExName(ex.exercise_key)) + '</span>' +
+      '<span class="pd-practiced-name">' + esc(pdExName(ex.exercise_key)) + '</span>' +
       '<div class="pd-practiced-track"><div class="pd-practiced-bar" style="--w:' + pct + '%"></div></div>' +
       '<span class="pd-practiced-count">' + ex.total_logs + '</span>' +
       '</div>';
