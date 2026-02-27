@@ -96,6 +96,183 @@ module.exports = function (pool) {
     }
   });
 
+  // Dashboard stats — all computed data for the progress dashboard
+  router.get('/dashboard/stats', requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+
+      const userResult = await pool.query(
+        'SELECT id, current_level, created_at FROM muscleup_users WHERE id=$1',
+        [userId]
+      );
+      const user = userResult.rows[0];
+      if (!user) {
+        return res.status(401).json({ error: 'Session invalid or user no longer exists.' });
+      }
+
+      // Run all independent queries in parallel
+      const [
+        heatmapResult,
+        weeklyVolumeResult,
+        personalBestsResult,
+        exerciseBreakdownResult,
+        totalsResult,
+        graduationsResult,
+        streakDatesResult,
+      ] = await Promise.all([
+        // Heatmap: daily log counts for the past 182 days
+        pool.query(
+          `SELECT session_date::text AS date, COUNT(*)::int AS count
+           FROM muscleup_progress_logs
+           WHERE user_id = $1 AND session_date >= CURRENT_DATE - INTERVAL '182 days'
+           GROUP BY session_date
+           ORDER BY session_date`,
+          [userId]
+        ),
+
+        // Weekly volume: sessions and sets per ISO week for the past 12 weeks
+        pool.query(
+          `SELECT TO_CHAR(DATE_TRUNC('week', session_date), 'IYYY-"W"IW') AS week,
+                  COUNT(DISTINCT session_date)::int AS sessions,
+                  COALESCE(SUM(sets_completed), 0)::int AS sets
+           FROM muscleup_progress_logs
+           WHERE user_id = $1 AND session_date >= CURRENT_DATE - INTERVAL '84 days'
+           GROUP BY DATE_TRUNC('week', session_date)
+           ORDER BY DATE_TRUNC('week', session_date)`,
+          [userId]
+        ),
+
+        // Personal bests: best hold time per exercise (only timed exercises)
+        pool.query(
+          `SELECT DISTINCT ON (exercise_key)
+                  exercise_key,
+                  hold_time_seconds AS best_hold_seconds,
+                  sets_completed AS best_sets,
+                  session_date::text AS achieved_at
+           FROM muscleup_progress_logs
+           WHERE user_id = $1 AND hold_time_seconds IS NOT NULL AND hold_time_seconds > 0
+           ORDER BY exercise_key, hold_time_seconds DESC, session_date DESC`,
+          [userId]
+        ),
+
+        // Exercise breakdown: top 10 most practiced
+        pool.query(
+          `SELECT exercise_key, COUNT(*)::int AS total_logs
+           FROM muscleup_progress_logs
+           WHERE user_id = $1
+           GROUP BY exercise_key
+           ORDER BY total_logs DESC
+           LIMIT 10`,
+          [userId]
+        ),
+
+        // Totals: total logs, total sets, total sessions (distinct days)
+        pool.query(
+          `SELECT COUNT(*)::int AS total_logs,
+                  COALESCE(SUM(sets_completed), 0)::int AS total_sets,
+                  COUNT(DISTINCT session_date)::int AS total_sessions
+           FROM muscleup_progress_logs
+           WHERE user_id = $1`,
+          [userId]
+        ),
+
+        // Graduations for level timeline
+        pool.query(
+          'SELECT level, graduated_at FROM muscleup_graduations WHERE user_id=$1 ORDER BY level',
+          [userId]
+        ),
+
+        // All distinct session dates for streak calculation (current + longest)
+        pool.query(
+          'SELECT DISTINCT session_date FROM muscleup_progress_logs WHERE user_id=$1 ORDER BY session_date DESC',
+          [userId]
+        ),
+      ]);
+
+      // Compute streaks (current and longest) from session dates
+      const streakDates = streakDatesResult.rows.map(r => {
+        const d = new Date(r.session_date);
+        d.setHours(0, 0, 0, 0);
+        return d;
+      });
+
+      let currentStreak = 0;
+      let longestStreak = 0;
+      if (streakDates.length > 0) {
+        // Current streak: count consecutive days from today backwards
+        let expected = new Date();
+        expected.setHours(0, 0, 0, 0);
+        for (const d of streakDates) {
+          if (Math.round((expected - d) / 86400000) <= 1) {
+            currentStreak++;
+            expected = d;
+          } else break;
+        }
+
+        // Longest streak: scan all dates chronologically
+        const chronological = [...streakDates].reverse();
+        let runLength = 1;
+        longestStreak = 1;
+        for (let i = 1; i < chronological.length; i++) {
+          const diff = Math.round((chronological[i] - chronological[i - 1]) / 86400000);
+          if (diff === 1) {
+            runLength++;
+            if (runLength > longestStreak) longestStreak = runLength;
+          } else {
+            runLength = 1;
+          }
+        }
+      }
+
+      // Build level timeline from graduations
+      const graduations = graduationsResult.rows;
+      const userCreated = user.created_at;
+      const levelTimeline = [];
+      for (let lv = 1; lv <= 6; lv++) {
+        const grad = graduations.find(g => g.level === lv);
+        const prevGrad = graduations.find(g => g.level === lv - 1);
+        const startedAt = lv === 1
+          ? String(userCreated).slice(0, 10)
+          : (prevGrad ? String(prevGrad.graduated_at).slice(0, 10) : null);
+        levelTimeline.push({
+          level: lv,
+          started_at: startedAt,
+          graduated_at: grad ? String(grad.graduated_at).slice(0, 10) : null,
+        });
+      }
+
+      // Add display names to exercise breakdown
+      const exerciseBreakdown = exerciseBreakdownResult.rows.map(row => ({
+        exercise_key: row.exercise_key,
+        total_logs: row.total_logs,
+      }));
+
+      const totals = totalsResult.rows[0];
+      const memberSinceDays = Math.max(1, Math.floor((Date.now() - new Date(userCreated).getTime()) / 86400000));
+
+      res.json({
+        heatmap: heatmapResult.rows,
+        weeklyVolume: weeklyVolumeResult.rows,
+        personalBests: personalBestsResult.rows,
+        levelTimeline,
+        exerciseBreakdown,
+        totals: {
+          totalSessions: totals.total_sessions,
+          totalSets: totals.total_sets,
+          totalLogs: totals.total_logs,
+          memberSinceDays,
+        },
+        streak: {
+          current: currentStreak,
+          longest: longestStreak,
+        },
+      });
+    } catch (err) {
+      console.error('Dashboard stats error:', err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
   // Delete log
   router.delete('/log/:id', requireAuth, async (req, res) => {
     try {
