@@ -38,19 +38,112 @@ function pdExName(key) {
   return PD_EXERCISE_NAMES[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+/* ── Demo Data ── */
+
+function pdMulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function pdGetISOWeek(d) {
+  var date = new Date(d.valueOf());
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+  var week1 = new Date(date.getFullYear(), 0, 4);
+  return 1 + Math.round(((date - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
+
+function pdGenerateDemoStats(dashboard) {
+  var rng = pdMulberry32(42);
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  var heatmap = [];
+  for (var i = 181; i >= 0; i--) {
+    var d = new Date(today);
+    d.setDate(d.getDate() - i);
+    var bias = Math.max(0.3, 1 - (i / 30) * 0.1);
+    var isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    var count = 0;
+    if (rng() > 0.15) {
+      if (rng() < bias) {
+        count = isWeekend ? Math.floor(rng() * 3) + 4 : Math.floor(rng() * 3) + 1 + Math.floor(bias * 2);
+      }
+    }
+    if (i === 0) count = Math.max(count, 1);
+    if (count > 0) heatmap.push({ date: d.toISOString().slice(0, 10), count: count });
+  }
+
+  var weeklyVolume = [];
+  for (var w = 11; w >= 0; w--) {
+    var weekStart = new Date(today);
+    weekStart.setDate(weekStart.getDate() - w * 7);
+    var weekLabel = weekStart.getFullYear() + '-W' + String(pdGetISOWeek(weekStart)).padStart(2, '0');
+    var sessions = Math.floor(rng() * 4) + 3 + Math.floor((12 - w) * 0.15);
+    var sets = sessions * (Math.floor(rng() * 4) + 3);
+    if (w < 3) { sessions = Math.ceil(sessions * 1.2); sets = Math.ceil(sets * 1.2); }
+    weeklyVolume.push({ week: weekLabel, sessions: sessions, sets: sets });
+  }
+
+  var userCreated = dashboard.user.created_at;
+  var levelTimeline = [];
+  for (var lv = 1; lv <= 6; lv++) {
+    var grad = dashboard.graduations.find(function (g) { return g.level === lv; });
+    var prevGrad = dashboard.graduations.find(function (g) { return g.level === lv - 1; });
+    levelTimeline.push({
+      level: lv,
+      started_at: lv === 1 ? String(userCreated).slice(0, 10) : (prevGrad ? String(prevGrad.graduated_at).slice(0, 10) : null),
+      graduated_at: grad ? String(grad.graduated_at).slice(0, 10) : null,
+    });
+  }
+
+  var memberSinceDays = Math.max(1, Math.floor((today - new Date(userCreated)) / 86400000));
+  return {
+    heatmap: heatmap,
+    weeklyVolume: weeklyVolume,
+    personalBests: [
+      { exercise_key: 'ring_dead_hang', best_hold_seconds: 75, best_sets: 5, achieved_at: '2025-11-15' },
+      { exercise_key: 'false_grip_hang', best_hold_seconds: 45, best_sets: 4, achieved_at: '2026-01-10' },
+      { exercise_key: 'ring_support', best_hold_seconds: 60, best_sets: 5, achieved_at: '2025-12-20' },
+      { exercise_key: 'bent_arm_hold', best_hold_seconds: 15, best_sets: 5, achieved_at: '2026-02-05' },
+      { exercise_key: 'ring_support_turnout', best_hold_seconds: 35, best_sets: 3, achieved_at: '2026-01-28' },
+    ],
+    levelTimeline: levelTimeline,
+    exerciseBreakdown: [
+      { exercise_key: 'pull_ups', total_logs: 47 },
+      { exercise_key: 'ring_rows', total_logs: 42 },
+      { exercise_key: 'false_grip_pullups', total_logs: 38 },
+      { exercise_key: 'ring_dips', total_logs: 35 },
+      { exercise_key: 'push_ups', total_logs: 33 },
+    ],
+    totals: { totalSessions: dashboard.totalSessions || 87, totalSets: weeklyVolume.reduce(function (s, w) { return s + w.sets; }, 0), totalLogs: 320, memberSinceDays: memberSinceDays },
+    streak: { current: dashboard.streak || 12, longest: Math.max(dashboard.streak || 0, 23) },
+  };
+}
+
 /* ── Main Render ── */
 
 async function renderProgress() {
   var app = document.getElementById('app');
+  var useLiveData = localStorage.getItem('pd_live_data') === '1';
 
   var dashboard, stats;
   try {
-    var results = await Promise.all([
-      api('/dashboard'),
-      api('/dashboard/stats'),
-    ]);
-    dashboard = results[0];
-    stats = results[1];
+    if (useLiveData) {
+      var results = await Promise.all([
+        api('/dashboard'),
+        api('/dashboard/stats'),
+      ]);
+      dashboard = results[0];
+      stats = results[1];
+    } else {
+      dashboard = await api('/dashboard');
+      stats = pdGenerateDemoStats(dashboard);
+    }
   } catch (e) {
     app.innerHTML = `
       <div class="auth-prompt">
@@ -64,12 +157,21 @@ async function renderProgress() {
   var todayStr = new Date().toISOString().slice(0, 10);
   var loggedToday = stats.heatmap.some(function (h) { return h.date === todayStr && h.count > 0; });
 
+  var demoBannerHtml = useLiveData ? '' : `
+      <div class="pd-demo-banner">
+        <div class="pd-demo-banner-text">
+          <strong>You're viewing demo data.</strong> Switch to your real progress to see your actual training stats.
+        </div>
+        <button class="pd-demo-banner-btn" id="pdSwitchLive">Show My Real Data</button>
+      </div>`;
+
   app.innerHTML = `
     <div class="pd-container">
       <header class="pd-header">
         <h1 class="pd-title">Your Progress</h1>
         <p class="pd-subtitle">Hey ${esc(dashboard.user.display_name)} — here's your training journey so far</p>
       </header>
+      ${demoBannerHtml}
 
       <section class="pd-section pd-hero" aria-label="Key statistics">
         <div class="pd-hero-grid">
@@ -161,6 +263,14 @@ async function renderProgress() {
   }, 150);
 
   pdInitObserver();
+
+  var switchBtn = document.getElementById('pdSwitchLive');
+  if (switchBtn) {
+    switchBtn.addEventListener('click', function () {
+      localStorage.setItem('pd_live_data', '1');
+      renderProgress();
+    });
+  }
 }
 
 /* ── Heatmap ── */

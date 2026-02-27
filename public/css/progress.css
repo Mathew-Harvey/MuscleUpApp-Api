@@ -397,6 +397,60 @@
   flex-shrink: 0;
 }
 
+/* ── Demo Banner ── */
+.pd-demo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: rgba(240, 136, 62, 0.08);
+  border: 1px solid rgba(240, 136, 62, 0.3);
+  border-radius: 12px;
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.pd-demo-banner-text {
+  font-size: 0.82rem;
+  color: #e6edf3;
+  line-height: 1.4;
+}
+
+.pd-demo-banner-text strong {
+  color: #f0883e;
+}
+
+.pd-demo-banner-btn {
+  flex-shrink: 0;
+  background: #f0883e;
+  color: #0d1117;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.pd-demo-banner-btn:hover {
+  background: #f5a060;
+  transform: translateY(-1px);
+}
+
+.pd-demo-banner-btn:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 479px) {
+  .pd-demo-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
 /* ── Responsive ── */
 @media (max-width: 639px) {
   .pd-hero-grid { grid-template-columns: repeat(2, 1fr); }
