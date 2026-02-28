@@ -129,21 +129,13 @@ function pdGenerateDemoStats(dashboard) {
 
 async function renderProgress() {
   var app = document.getElementById('app');
-  var useLiveData = localStorage.getItem('pd_live_data') === '1';
+  // Default: show live data (only show demo when user explicitly set pd_live_data to '0')
+  var useLiveData = localStorage.getItem('pd_live_data') !== '0';
 
   var dashboard, stats;
   try {
-    if (useLiveData) {
-      var results = await Promise.all([
-        api('/dashboard'),
-        api('/dashboard/stats'),
-      ]);
-      dashboard = results[0];
-      stats = results[1];
-    } else {
-      dashboard = await api('/dashboard');
-      stats = pdGenerateDemoStats(dashboard);
-    }
+    dashboard = await api('/dashboard');
+    stats = pdGenerateDemoStats(dashboard);
   } catch (e) {
     app.innerHTML = `
       <div class="auth-prompt">
@@ -156,6 +148,12 @@ async function renderProgress() {
 
   var todayStr = new Date().toISOString().slice(0, 10);
   var loggedToday = stats.heatmap.some(function (h) { return h.date === todayStr && h.count > 0; });
+  var currentStreak = useLiveData ? (dashboard.streak != null ? dashboard.streak : 0) : stats.streak.current;
+  var longestStreak = useLiveData ? Math.max(dashboard.streak != null ? dashboard.streak : 0, currentStreak) : stats.streak.longest;
+  var totalSessions = useLiveData ? (dashboard.totalSessions != null ? dashboard.totalSessions : 0) : stats.totals.totalSessions;
+  var memberSinceDays = useLiveData && dashboard.user.created_at
+    ? Math.max(1, Math.floor((Date.now() - new Date(dashboard.user.created_at)) / 86400000))
+    : stats.totals.memberSinceDays;
 
   var demoBannerHtml = useLiveData ? '' : `
       <div class="pd-demo-banner">
@@ -177,22 +175,22 @@ async function renderProgress() {
         <div class="pd-hero-grid">
           <div class="pd-stat-card pd-stat-streak">
             <div class="pd-stat-icon ${loggedToday ? 'pd-flame-active' : ''}">🔥</div>
-            <div class="pd-stat-value pd-countup" data-target="${stats.streak.current}">0</div>
+            <div class="pd-stat-value pd-countup" data-target="${currentStreak}">0</div>
             <div class="pd-stat-label">Current Streak</div>
           </div>
           <div class="pd-stat-card">
             <div class="pd-stat-icon">⚡</div>
-            <div class="pd-stat-value pd-countup" data-target="${stats.streak.longest}">0</div>
+            <div class="pd-stat-value pd-countup" data-target="${longestStreak}">0</div>
             <div class="pd-stat-label">Longest Streak</div>
           </div>
           <div class="pd-stat-card">
             <div class="pd-stat-icon">💪</div>
-            <div class="pd-stat-value pd-countup" data-target="${stats.totals.totalSessions}">0</div>
+            <div class="pd-stat-value pd-countup" data-target="${totalSessions}">0</div>
             <div class="pd-stat-label">Total Sessions</div>
           </div>
           <div class="pd-stat-card">
             <div class="pd-stat-icon">📅</div>
-            <div class="pd-stat-value pd-countup" data-target="${stats.totals.memberSinceDays}">0</div>
+            <div class="pd-stat-value pd-countup" data-target="${memberSinceDays}">0</div>
             <div class="pd-stat-label">Days Since Joined</div>
           </div>
         </div>

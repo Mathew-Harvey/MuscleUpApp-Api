@@ -11,7 +11,7 @@ module.exports = function (pool) {
   router.get('/dashboard', requireAuth, async (req, res) => {
     try {
       const userResult = await pool.query(
-        'SELECT id, email, display_name, current_level, created_at FROM muscleup_users WHERE id=$1',
+        'SELECT id, email, display_name, current_level, created_at FROM mu_users WHERE id=$1',
         [req.session.userId]
       );
       const user = userResult.rows[0];
@@ -19,16 +19,16 @@ module.exports = function (pool) {
         return res.status(401).json({ error: 'Session invalid or user no longer exists.' });
       }
       const graduations = (await pool.query(
-        'SELECT level, graduated_at FROM muscleup_graduations WHERE user_id=$1 ORDER BY level',
+        'SELECT level, graduated_at FROM mu_graduations WHERE user_id=$1 ORDER BY level',
         [req.session.userId]
       )).rows;
       const recentLogs = (await pool.query(
         `SELECT id, level, exercise_key, sets_completed, reps_or_duration, hold_time_seconds, notes, session_date
-         FROM muscleup_progress_logs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20`,
+         FROM mu_progress_logs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20`,
         [req.session.userId]
       )).rows;
       const totalSessions = (await pool.query(
-        'SELECT COUNT(DISTINCT session_date) as cnt FROM muscleup_progress_logs WHERE user_id=$1',
+        'SELECT COUNT(DISTINCT session_date) as cnt FROM mu_progress_logs WHERE user_id=$1',
         [req.session.userId]
       )).rows[0].cnt;
       const streak = await getStreak(pool, req.session.userId);
@@ -45,11 +45,11 @@ module.exports = function (pool) {
     if (Number.isNaN(level) || level < 1 || level > 6) return res.status(400).json({ error: 'Invalid level' });
     try {
       const logs = (await pool.query(
-        `SELECT * FROM muscleup_progress_logs WHERE user_id=$1 AND level=$2 ORDER BY session_date DESC, created_at DESC LIMIT 50`,
+        `SELECT * FROM mu_progress_logs WHERE user_id=$1 AND level=$2 ORDER BY session_date DESC, created_at DESC LIMIT 50`,
         [req.session.userId, level]
       )).rows;
       const graduated = (await pool.query(
-        'SELECT level, graduated_at FROM muscleup_graduations WHERE user_id=$1 AND level=$2',
+        'SELECT level, graduated_at FROM mu_graduations WHERE user_id=$1 AND level=$2',
         [req.session.userId, level]
       )).rows[0] || null;
       res.json({ logs, graduated });
@@ -67,7 +67,7 @@ module.exports = function (pool) {
     if (Number.isNaN(levelNum) || levelNum < 1 || levelNum > 6) return res.status(400).json({ error: 'level must be 1–6' });
     try {
       const result = await pool.query(
-        `INSERT INTO muscleup_progress_logs (user_id, level, exercise_key, sets_completed, reps_or_duration, hold_time_seconds, notes)
+        `INSERT INTO mu_progress_logs (user_id, level, exercise_key, sets_completed, reps_or_duration, hold_time_seconds, notes)
          VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
         [req.session.userId, levelNum, exercise_key, sets_completed || 0, reps_or_duration || '', hold_time_seconds || null, notes || '']
       );
@@ -84,11 +84,11 @@ module.exports = function (pool) {
     if (Number.isNaN(lvl) || lvl < 1 || lvl > 6) return res.status(400).json({ error: 'Invalid level' });
     try {
       await pool.query(
-        'INSERT INTO muscleup_graduations (user_id, level) VALUES ($1,$2) ON CONFLICT (user_id, level) DO NOTHING',
+        'INSERT INTO mu_graduations (user_id, level) VALUES ($1,$2) ON CONFLICT (user_id, level) DO NOTHING',
         [req.session.userId, lvl]
       );
       const nextLevel = Math.min(lvl + 1, 6);
-      await pool.query('UPDATE muscleup_users SET current_level=$1, updated_at=NOW() WHERE id=$2', [nextLevel, req.session.userId]);
+      await pool.query('UPDATE mu_users SET current_level=$1, updated_at=NOW() WHERE id=$2', [nextLevel, req.session.userId]);
       res.json({ ok: true, nextLevel });
     } catch (err) {
       console.error('Graduate error:', err);
@@ -276,7 +276,7 @@ module.exports = function (pool) {
   // Delete log
   router.delete('/log/:id', requireAuth, async (req, res) => {
     try {
-      const result = await pool.query('DELETE FROM muscleup_progress_logs WHERE id=$1 AND user_id=$2', [req.params.id, req.session.userId]);
+      const result = await pool.query('DELETE FROM mu_progress_logs WHERE id=$1 AND user_id=$2', [req.params.id, req.session.userId]);
       if (result.rowCount === 0) {
         return res.status(404).json({ error: 'Log not found' });
       }
@@ -291,19 +291,20 @@ module.exports = function (pool) {
 
 async function getStreak(pool, userId) {
   const result = await pool.query(
-    'SELECT DISTINCT session_date FROM muscleup_progress_logs WHERE user_id=$1 ORDER BY session_date DESC LIMIT 60',
+    'SELECT DISTINCT session_date FROM mu_progress_logs WHERE user_id=$1 ORDER BY session_date DESC LIMIT 60',
     [userId]
   );
   if (!result.rows.length) return 0;
   let streak = 0;
-  let expected = new Date();
-  expected.setHours(0, 0, 0, 0);
+  const now = new Date();
+  let expected = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   for (const row of result.rows) {
-    const d = new Date(row.session_date);
-    d.setHours(0, 0, 0, 0);
-    if (Math.round((expected - d) / 86400000) <= 1) {
+    const d = new Date(row.session_date + 'T00:00:00.000Z');
+    const dayUtc = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const expectedUtc = expected.getTime();
+    if (Math.round((expectedUtc - dayUtc) / 86400000) <= 1) {
       streak++;
-      expected = d;
+      expected = new Date(dayUtc);
     } else break;
   }
   return streak;

@@ -19,14 +19,17 @@ const PORT = process.env.PORT || 4000;
 // Database
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // Render/Heroku Postgres use self-signed certs; rejectUnauthorized: false required in production.
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
-// Auto-init schema
+// Auto-init schema and run migration from muscleup_* to mu_* if needed
 (async () => {
   try {
     const schema = fs.readFileSync(path.join(__dirname, 'db', 'schema.sql'), 'utf8');
     await pool.query(schema);
+    const migration = fs.readFileSync(path.join(__dirname, 'db', 'migrate_muscleup_to_mu.sql'), 'utf8');
+    await pool.query(migration);
     console.log('Database schema ready');
   } catch (err) {
     console.error('Schema init warning:', err.message);
@@ -61,7 +64,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Sessions
 app.use(session({
-  store: new pgSession({ pool, tableName: 'muscleup_session', createTableIfMissing: true }),
+  store: new pgSession({ pool, tableName: 'mu_session', createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET || 'muscleup-dev-secret-change-me',
   resave: false,
   saveUninitialized: false,

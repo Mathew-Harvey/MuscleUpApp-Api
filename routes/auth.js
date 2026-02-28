@@ -35,7 +35,12 @@ function requireTrackerApiSecret(req, res, next) {
   const apiKey = req.headers['x-api-key'];
   const bearer = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   const provided = bearer || apiKey;
-  if (!provided || provided !== secret) {
+  if (!provided) {
+    return res.status(401).json({ error: 'Missing or invalid API secret.' });
+  }
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(secret, 'utf8');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     return res.status(401).json({ error: 'Missing or invalid API secret.' });
   }
   next();
@@ -65,7 +70,7 @@ module.exports = function (pool) {
     }
     try {
       const result = await pool.query(
-        'SELECT id, email, display_name, current_level, theme, created_at FROM muscleup_users WHERE id=$1',
+        'SELECT id, email, display_name, current_level, theme, created_at FROM mu_users WHERE id=$1',
         [req.session.userId]
       );
       if (!result.rows.length) return res.json({ authenticated: false });
@@ -100,18 +105,18 @@ module.exports = function (pool) {
     }
     const tempPasswordHash = await bcrypt.hash(temporaryPassword.trim(), 12);
     try {
-      const exists = await pool.query('SELECT id, email, display_name, current_level FROM muscleup_users WHERE email=$1', [emailNorm]);
+      const exists = await pool.query('SELECT id, email, display_name, current_level FROM mu_users WHERE email=$1', [emailNorm]);
       const expiresAt = new Date(Date.now() + SET_PASSWORD_EXPIRY_HOURS * 60 * 60 * 1000);
       const token = generateToken();
 
       if (exists.rows.length) {
         const user = exists.rows[0];
         await pool.query(
-          'UPDATE muscleup_users SET display_name = $1, password_hash = $2, updated_at = NOW() WHERE id = $3',
+          'UPDATE mu_users SET display_name = $1, password_hash = $2, updated_at = NOW() WHERE id = $3',
           [displayName, tempPasswordHash, user.id]
         );
         await pool.query(
-          'INSERT INTO muscleup_password_tokens (user_id, token_hash, type, expires_at) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, type) DO UPDATE SET token_hash=$2, expires_at=$4',
+          'INSERT INTO mu_password_tokens (user_id, token_hash, type, expires_at) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, type) DO UPDATE SET token_hash=$2, expires_at=$4',
           [user.id, hashToken(token), 'set_password', expiresAt]
         );
         return res.status(200).json({
@@ -122,12 +127,12 @@ module.exports = function (pool) {
       }
 
       const result = await pool.query(
-        'INSERT INTO muscleup_users (email, password_hash, display_name) VALUES ($1,$2,$3) RETURNING id, email, display_name, current_level',
+        'INSERT INTO mu_users (email, password_hash, display_name) VALUES ($1,$2,$3) RETURNING id, email, display_name, current_level',
         [emailNorm, tempPasswordHash, displayName]
       );
       const user = result.rows[0];
       await pool.query(
-        'INSERT INTO muscleup_password_tokens (user_id, token_hash, type, expires_at) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, type) DO UPDATE SET token_hash=$2, expires_at=$4',
+        'INSERT INTO mu_password_tokens (user_id, token_hash, type, expires_at) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, type) DO UPDATE SET token_hash=$2, expires_at=$4',
         [user.id, hashToken(token), 'set_password', expiresAt]
       );
       res.status(201).json({
@@ -160,16 +165,19 @@ module.exports = function (pool) {
       return res.status(400).json({ error: 'Display name cannot be empty.' });
     }
     try {
-      const exists = await pool.query('SELECT id FROM muscleup_users WHERE email=$1', [email.toLowerCase()]);
+      const exists = await pool.query('SELECT id FROM mu_users WHERE email=$1', [email.toLowerCase()]);
       if (exists.rows.length) {
         return res.status(409).json({ error: 'Email already registered.' });
       }
       const hash = await bcrypt.hash(password, 12);
       const result = await pool.query(
-        'INSERT INTO muscleup_users (email, password_hash, display_name, theme) VALUES ($1,$2,$3,$4) RETURNING id, email, display_name, current_level, theme',
+        'INSERT INTO mu_users (email, password_hash, display_name, theme) VALUES ($1,$2,$3,$4) RETURNING id, email, display_name, current_level, theme',
         [email.toLowerCase(), hash, display_name.trim(), 'dark']
       );
       const user = result.rows[0];
+      await new Promise((resolve, reject) => {
+        req.session.regenerate((err) => { if (err) reject(err); else resolve(); });
+      });
       req.session.userId = user.id;
       req.session.displayName = user.display_name;
       res.status(201).json({ user });
@@ -186,7 +194,10 @@ module.exports = function (pool) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
     try {
-      const result = await pool.query('SELECT * FROM muscleup_users WHERE email=$1', [email.toLowerCase()]);
+      const result = await pool.query(
+        'SELECT id, email, display_name, current_level, theme, password_hash FROM mu_users WHERE email=$1',
+        [email.toLowerCase()]
+      );
       if (!result.rows.length) {
         return res.status(401).json({ error: 'Invalid email or password.' });
       }
@@ -195,6 +206,9 @@ module.exports = function (pool) {
       if (!valid) {
         return res.status(401).json({ error: 'Invalid email or password.' });
       }
+      await new Promise((resolve, reject) => {
+        req.session.regenerate((err) => { if (err) reject(err); else resolve(); });
+      });
       req.session.userId = user.id;
       req.session.displayName = user.display_name;
       res.json({
@@ -206,8 +220,8 @@ module.exports = function (pool) {
     }
   });
 
-  // Logout
-  router.post('/auth/logout', (req, res) => {
+  // Logout (requireAuth so only authenticated users can clear their session)
+  router.post('/auth/logout', requireAuth, (req, res) => {
     req.session.destroy(() => res.json({ ok: true }));
   });
 
@@ -217,14 +231,17 @@ module.exports = function (pool) {
     if (!token) return res.status(400).json({ error: 'Token required' });
     try {
       const r = await pool.query(
-        `SELECT u.id, u.email, u.display_name, u.current_level FROM muscleup_users u
-         JOIN password_tokens pt ON pt.user_id = u.id
+        `SELECT u.id, u.email, u.display_name, u.current_level FROM mu_users u
+         JOIN mu_password_tokens pt ON pt.user_id = u.id
          WHERE pt.token_hash = $1 AND pt.type IN ('set_password', 'reset_password') AND pt.expires_at > NOW()`,
         [hashToken(token)]
       );
       if (!r.rows.length) return res.status(400).json({ error: 'Invalid or expired token' });
       const row = r.rows[0];
       const user = { id: row.id, email: row.email, display_name: row.display_name, current_level: row.current_level };
+      await new Promise((resolve, reject) => {
+        req.session.regenerate((err) => { if (err) reject(err); else resolve(); });
+      });
       req.session.userId = user.id;
       req.session.displayName = user.display_name;
       res.json({ user });
@@ -243,20 +260,23 @@ module.exports = function (pool) {
     if (pwd.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
     try {
       const r = await pool.query(
-        `SELECT user_id, type FROM muscleup_password_tokens
+        `SELECT user_id, type FROM mu_password_tokens
          WHERE token_hash = $1 AND type IN ('set_password', 'reset_password') AND expires_at > NOW()`,
         [hashToken(token)]
       );
       if (!r.rows.length) return res.status(400).json({ error: 'Invalid or expired token' });
       const userId = r.rows[0].user_id;
       const hash = await bcrypt.hash(pwd, 12);
-      await pool.query('UPDATE muscleup_users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, userId]);
-      await pool.query("DELETE FROM muscleup_password_tokens WHERE user_id = $1 AND type IN ('set_password', 'reset_password')", [userId]);
+      await pool.query('UPDATE mu_users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, userId]);
+      await pool.query("DELETE FROM mu_password_tokens WHERE user_id = $1 AND type IN ('set_password', 'reset_password')", [userId]);
       const userResult = await pool.query(
-        'SELECT id, email, display_name, current_level FROM muscleup_users WHERE id = $1',
+        'SELECT id, email, display_name, current_level FROM mu_users WHERE id = $1',
         [userId]
       );
       const user = userResult.rows[0];
+      await new Promise((resolve, reject) => {
+        req.session.regenerate((err) => { if (err) reject(err); else resolve(); });
+      });
       req.session.userId = user.id;
       req.session.displayName = user.display_name;
       res.json({ user });
@@ -275,7 +295,7 @@ module.exports = function (pool) {
     const baseUrl = process.env.TRACKER_APP_URL || process.env.TRACKER_LOGIN_URL || '';
     const canSendEmail = !!(process.env.RESEND_API_KEY && baseUrl && process.env.RESEND_FROM);
     try {
-      const userResult = await pool.query('SELECT id FROM muscleup_users WHERE email = $1', [emailNorm]);
+      const userResult = await pool.query('SELECT id FROM mu_users WHERE email = $1', [emailNorm]);
       if (userResult.rows.length === 0) {
         return res.json({ ok: true });
       }
@@ -283,7 +303,7 @@ module.exports = function (pool) {
       const token = generateToken();
       const expiresAt = new Date(Date.now() + RESET_PASSWORD_EXPIRY_HOURS * 60 * 60 * 1000);
       await pool.query(
-        'INSERT INTO muscleup_password_tokens (user_id, token_hash, type, expires_at) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, type) DO UPDATE SET token_hash=$2, expires_at=$4',
+        'INSERT INTO mu_password_tokens (user_id, token_hash, type, expires_at) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, type) DO UPDATE SET token_hash=$2, expires_at=$4',
         [userId, hashToken(token), 'reset_password', expiresAt]
       );
       const setPasswordUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/set-password?token=${token}` : null;
@@ -325,20 +345,23 @@ module.exports = function (pool) {
     if (password !== (confirm_password ?? password)) return res.status(400).json({ error: 'Passwords do not match.' });
     try {
       const r = await pool.query(
-        `SELECT user_id FROM muscleup_password_tokens
+        `SELECT user_id FROM mu_password_tokens
          WHERE token_hash = $1 AND type = 'reset_password' AND expires_at > NOW()`,
         [hashToken(token)]
       );
       if (!r.rows.length) return res.status(400).json({ error: 'Invalid or expired token' });
       const userId = r.rows[0].user_id;
       const hash = await bcrypt.hash(password, 12);
-      await pool.query('UPDATE muscleup_users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, userId]);
-      await pool.query("DELETE FROM muscleup_password_tokens WHERE user_id = $1 AND type = 'reset_password'", [userId]);
+      await pool.query('UPDATE mu_users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, userId]);
+      await pool.query("DELETE FROM mu_password_tokens WHERE user_id = $1 AND type = 'reset_password'", [userId]);
       const userResult = await pool.query(
-        'SELECT id, email, display_name, current_level FROM muscleup_users WHERE id = $1',
+        'SELECT id, email, display_name, current_level FROM mu_users WHERE id = $1',
         [userId]
       );
       const user = userResult.rows[0];
+      await new Promise((resolve, reject) => {
+        req.session.regenerate((err) => { if (err) reject(err); else resolve(); });
+      });
       req.session.userId = user.id;
       req.session.displayName = user.display_name;
       res.json({ user });
@@ -361,7 +384,7 @@ module.exports = function (pool) {
       return res.status(400).json({ error: 'New passwords do not match.' });
     }
     try {
-      const result = await pool.query('SELECT password_hash FROM muscleup_users WHERE id=$1', [req.session.userId]);
+      const result = await pool.query('SELECT password_hash FROM mu_users WHERE id=$1', [req.session.userId]);
       if (!result.rows.length) {
         return res.status(404).json({ error: 'User not found.' });
       }
@@ -370,7 +393,7 @@ module.exports = function (pool) {
         return res.status(401).json({ error: 'Current password is incorrect.' });
       }
       const hash = await bcrypt.hash(new_password, 12);
-      await pool.query('UPDATE muscleup_users SET password_hash=$1, updated_at=NOW() WHERE id=$2', [hash, req.session.userId]);
+      await pool.query('UPDATE mu_users SET password_hash=$1, updated_at=NOW() WHERE id=$2', [hash, req.session.userId]);
       res.json({ ok: true });
     } catch (err) {
       console.error('Change password error:', err);
@@ -398,7 +421,7 @@ module.exports = function (pool) {
       }
       values.push(req.session.userId);
       const result = await pool.query(
-        `UPDATE muscleup_users SET ${updates.join(', ')}, updated_at=NOW() WHERE id=$${paramNum} RETURNING id, email, display_name, current_level, theme`,
+        `UPDATE mu_users SET ${updates.join(', ')}, updated_at=NOW() WHERE id=$${paramNum} RETURNING id, email, display_name, current_level, theme`,
         values
       );
       res.json({ user: result.rows[0] });
@@ -411,9 +434,9 @@ module.exports = function (pool) {
   // Reset all progress
   router.post('/auth/reset-progress', requireAuth, async (req, res) => {
     try {
-      await pool.query('DELETE FROM progress_logs WHERE user_id=$1', [req.session.userId]);
-      await pool.query('DELETE FROM graduations WHERE user_id=$1', [req.session.userId]);
-      await pool.query('UPDATE muscleup_users SET current_level=1, updated_at=NOW() WHERE id=$1', [req.session.userId]);
+      await pool.query('DELETE FROM mu_progress_logs WHERE user_id=$1', [req.session.userId]);
+      await pool.query('DELETE FROM mu_graduations WHERE user_id=$1', [req.session.userId]);
+      await pool.query('UPDATE mu_users SET current_level=1, updated_at=NOW() WHERE id=$1', [req.session.userId]);
       res.json({ ok: true });
     } catch (err) {
       console.error('Reset progress error:', err);
@@ -426,11 +449,11 @@ module.exports = function (pool) {
     try {
       for (let level = 1; level <= 6; level++) {
         await pool.query(
-          'INSERT INTO graduations (user_id, level) VALUES ($1,$2) ON CONFLICT (user_id, level) DO NOTHING',
+          'INSERT INTO mu_graduations (user_id, level) VALUES ($1,$2) ON CONFLICT (user_id, level) DO NOTHING',
           [req.session.userId, level]
         );
       }
-      await pool.query('UPDATE muscleup_users SET current_level=6, updated_at=NOW() WHERE id=$1', [req.session.userId]);
+      await pool.query('UPDATE mu_users SET current_level=6, updated_at=NOW() WHERE id=$1', [req.session.userId]);
       res.json({ ok: true });
     } catch (err) {
       console.error('Unlock all error:', err);
@@ -438,8 +461,8 @@ module.exports = function (pool) {
     }
   });
 
-  // Verify session for ebook access - returns ok if user is authenticated
-  router.get('/api/verify-session', (req, res) => {
+  // Verify session for ebook access - returns ok if user is authenticated (mounted under /api so path is /api/verify-session)
+  router.get('/verify-session', (req, res) => {
     if (req.session && req.session.userId) {
       res.json({ verified: true, userId: req.session.userId });
     } else {

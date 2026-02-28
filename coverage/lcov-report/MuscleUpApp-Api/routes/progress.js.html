@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/75</span>
+                <span class='fraction'>0/76</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/69</span>
+                <span class='fraction'>0/70</span>
             </div>
         
             
@@ -196,7 +196,8 @@
 <a name='L131'></a><a href='#L131'>131</a>
 <a name='L132'></a><a href='#L132'>132</a>
 <a name='L133'></a><a href='#L133'>133</a>
-<a name='L134'></a><a href='#L134'>134</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L134'></a><a href='#L134'>134</a>
+<a name='L135'></a><a href='#L135'>135</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -315,6 +316,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -342,7 +344,7 @@ const router = <span class="cstat-no" title="statement not covered" >express.Rou
 <span class="cstat-no" title="statement not covered" >  router.get('/dashboard', requireAuth, <span class="fstat-no" title="function not covered" >as</span>ync (req, res) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const userResult = <span class="cstat-no" title="statement not covered" >await pool.query(</span>
-        'SELECT id, email, display_name, current_level, created_at FROM muscleup_users WHERE id=$1',
+        'SELECT id, email, display_name, current_level, created_at FROM mu_users WHERE id=$1',
         [req.session.userId]
       );
       const user = <span class="cstat-no" title="statement not covered" >userResult.rows[0];</span>
@@ -350,16 +352,16 @@ const router = <span class="cstat-no" title="statement not covered" >express.Rou
 <span class="cstat-no" title="statement not covered" >        return res.status(401).json({ error: 'Session invalid or user no longer exists.' });</span>
       }
       const graduations = <span class="cstat-no" title="statement not covered" >(await pool.query(</span>
-        'SELECT level, graduated_at FROM muscleup_graduations WHERE user_id=$1 ORDER BY level',
+        'SELECT level, graduated_at FROM mu_graduations WHERE user_id=$1 ORDER BY level',
         [req.session.userId]
       )).rows;
       const recentLogs = <span class="cstat-no" title="statement not covered" >(await pool.query(</span>
         `SELECT id, level, exercise_key, sets_completed, reps_or_duration, hold_time_seconds, notes, session_date
-         FROM muscleup_progress_logs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20`,
+         FROM mu_progress_logs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20`,
         [req.session.userId]
       )).rows;
       const totalSessions = <span class="cstat-no" title="statement not covered" >(await pool.query(</span>
-        'SELECT COUNT(DISTINCT session_date) as cnt FROM muscleup_progress_logs WHERE user_id=$1',
+        'SELECT COUNT(DISTINCT session_date) as cnt FROM mu_progress_logs WHERE user_id=$1',
         [req.session.userId]
       )).rows[0].cnt;
       const streak = <span class="cstat-no" title="statement not covered" >await getStreak(pool, req.session.userId);</span>
@@ -376,11 +378,11 @@ const router = <span class="cstat-no" title="statement not covered" >express.Rou
 <span class="cstat-no" title="statement not covered" >    if (Number.isNaN(level) || level &lt; 1 || level &gt; 6) <span class="cstat-no" title="statement not covered" >return res.status(400).json({ error: 'Invalid level' });</span></span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const logs = <span class="cstat-no" title="statement not covered" >(await pool.query(</span>
-        `SELECT * FROM muscleup_progress_logs WHERE user_id=$1 AND level=$2 ORDER BY session_date DESC, created_at DESC LIMIT 50`,
+        `SELECT * FROM mu_progress_logs WHERE user_id=$1 AND level=$2 ORDER BY session_date DESC, created_at DESC LIMIT 50`,
         [req.session.userId, level]
       )).rows;
       const graduated = <span class="cstat-no" title="statement not covered" >(await pool.query(</span>
-        'SELECT level, graduated_at FROM muscleup_graduations WHERE user_id=$1 AND level=$2',
+        'SELECT level, graduated_at FROM mu_graduations WHERE user_id=$1 AND level=$2',
         [req.session.userId, level]
       )).rows[0] || null;
 <span class="cstat-no" title="statement not covered" >      res.json({ logs, graduated });</span>
@@ -398,7 +400,7 @@ const router = <span class="cstat-no" title="statement not covered" >express.Rou
 <span class="cstat-no" title="statement not covered" >    if (Number.isNaN(levelNum) || levelNum &lt; 1 || levelNum &gt; 6) <span class="cstat-no" title="statement not covered" >return res.status(400).json({ error: 'level must be 1–6' });</span></span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const result = <span class="cstat-no" title="statement not covered" >await pool.query(</span>
-        `INSERT INTO muscleup_progress_logs (user_id, level, exercise_key, sets_completed, reps_or_duration, hold_time_seconds, notes)
+        `INSERT INTO mu_progress_logs (user_id, level, exercise_key, sets_completed, reps_or_duration, hold_time_seconds, notes)
          VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
         [req.session.userId, levelNum, exercise_key, sets_completed || 0, reps_or_duration || '', hold_time_seconds || null, notes || '']
       );
@@ -415,11 +417,11 @@ const router = <span class="cstat-no" title="statement not covered" >express.Rou
 <span class="cstat-no" title="statement not covered" >    if (Number.isNaN(lvl) || lvl &lt; 1 || lvl &gt; 6) <span class="cstat-no" title="statement not covered" >return res.status(400).json({ error: 'Invalid level' });</span></span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >      await pool.query(</span>
-        'INSERT INTO muscleup_graduations (user_id, level) VALUES ($1,$2) ON CONFLICT (user_id, level) DO NOTHING',
+        'INSERT INTO mu_graduations (user_id, level) VALUES ($1,$2) ON CONFLICT (user_id, level) DO NOTHING',
         [req.session.userId, lvl]
       );
       const nextLevel = <span class="cstat-no" title="statement not covered" >Math.min(lvl + 1, 6);</span>
-<span class="cstat-no" title="statement not covered" >      await pool.query('UPDATE muscleup_users SET current_level=$1, updated_at=NOW() WHERE id=$2', [nextLevel, req.session.userId]);</span>
+<span class="cstat-no" title="statement not covered" >      await pool.query('UPDATE mu_users SET current_level=$1, updated_at=NOW() WHERE id=$2', [nextLevel, req.session.userId]);</span>
 <span class="cstat-no" title="statement not covered" >      res.json({ ok: true, nextLevel });</span>
     } catch (err) {
 <span class="cstat-no" title="statement not covered" >      console.error('Graduate error:', err);</span>
@@ -430,7 +432,7 @@ const router = <span class="cstat-no" title="statement not covered" >express.Rou
   // Delete log
 <span class="cstat-no" title="statement not covered" >  router.delete('/log/:id', requireAuth, <span class="fstat-no" title="function not covered" >as</span>ync (req, res) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
-      const result = <span class="cstat-no" title="statement not covered" >await pool.query('DELETE FROM muscleup_progress_logs WHERE id=$1 AND user_id=$2', [req.params.id, req.session.userId]);</span>
+      const result = <span class="cstat-no" title="statement not covered" >await pool.query('DELETE FROM mu_progress_logs WHERE id=$1 AND user_id=$2', [req.params.id, req.session.userId]);</span>
 <span class="cstat-no" title="statement not covered" >      if (result.rowCount === 0) {</span>
 <span class="cstat-no" title="statement not covered" >        return res.status(404).json({ error: 'Log not found' });</span>
       }
@@ -445,19 +447,20 @@ const router = <span class="cstat-no" title="statement not covered" >express.Rou
 &nbsp;
 async function <span class="fstat-no" title="function not covered" >getStreak(</span>pool, userId) {
   const result = <span class="cstat-no" title="statement not covered" >await pool.query(</span>
-    'SELECT DISTINCT session_date FROM muscleup_progress_logs WHERE user_id=$1 ORDER BY session_date DESC LIMIT 60',
+    'SELECT DISTINCT session_date FROM mu_progress_logs WHERE user_id=$1 ORDER BY session_date DESC LIMIT 60',
     [userId]
   );
 <span class="cstat-no" title="statement not covered" >  if (!result.rows.length) <span class="cstat-no" title="statement not covered" >return 0;</span></span>
   let streak = <span class="cstat-no" title="statement not covered" >0;</span>
-  let expected = <span class="cstat-no" title="statement not covered" >new Date();</span>
-<span class="cstat-no" title="statement not covered" >  expected.setHours(0, 0, 0, 0);</span>
+  const now = <span class="cstat-no" title="statement not covered" >new Date();</span>
+  let expected = <span class="cstat-no" title="statement not covered" >new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));</span>
 <span class="cstat-no" title="statement not covered" >  for (const row of result.rows) {</span>
-    const d = <span class="cstat-no" title="statement not covered" >new Date(row.session_date);</span>
-<span class="cstat-no" title="statement not covered" >    d.setHours(0, 0, 0, 0);</span>
-<span class="cstat-no" title="statement not covered" >    if (Math.round((expected - d) / 86400000) &lt;= 1) {</span>
+    const d = <span class="cstat-no" title="statement not covered" >new Date(row.session_date + 'T00:00:00.000Z');</span>
+    const dayUtc = <span class="cstat-no" title="statement not covered" >Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());</span>
+    const expectedUtc = <span class="cstat-no" title="statement not covered" >expected.getTime();</span>
+<span class="cstat-no" title="statement not covered" >    if (Math.round((expectedUtc - dayUtc) / 86400000) &lt;= 1) {</span>
 <span class="cstat-no" title="statement not covered" >      streak++;</span>
-<span class="cstat-no" title="statement not covered" >      expected = d;</span>
+<span class="cstat-no" title="statement not covered" >      expected = new Date(dayUtc);</span>
     } else <span class="cstat-no" title="statement not covered" >break;</span>
   }
 <span class="cstat-no" title="statement not covered" >  return streak;</span>
@@ -469,7 +472,7 @@ async function <span class="fstat-no" title="function not covered" >getStreak(</
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-21T12:39:40.511Z
+                at 2026-02-28T12:04:42.648Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

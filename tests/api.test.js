@@ -41,8 +41,8 @@ describe('MuscleUp API Integration Tests', () => {
   afterAll(async () => {
     if (testEmail) {
       try {
-        // Clean up from muscleup_users table
-        await pool.query('DELETE FROM muscleup_users WHERE email = $1', [testEmail]);
+        // Clean up from mu_users table
+        await pool.query('DELETE FROM mu_users WHERE email = $1', [testEmail]);
       } catch (e) {
         // Ignore cleanup errors
       }
