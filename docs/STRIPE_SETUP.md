@@ -4,6 +4,8 @@ You have a Stripe account; follow these steps to take payments and create user a
 
 **Where do Stripe vars go?** All Stripe configuration (`STRIPE_SECRET_KEY`, `STRIPE_PRODUCT_ID`, `STRIPE_PRICE_ID`, `STRIPE_SUCCESS_URL`, etc.) goes in the **API** `.env` (MuscleUpApp-Api), not the frontend. The frontend only links to the API or calls it; it never sees Stripe keys.
 
+**Landing page dev:** Use **[LANDING_PAGE_DEVELOPER_PROMPT.md](./LANDING_PAGE_DEVELOPER_PROMPT.md)** for the Muscle Up landing page (buy CTA, thank-you page, API calls). No Stripe keys on the landing page.
+
 ---
 
 ## 1. Get your API keys
