@@ -75,7 +75,13 @@ module.exports = function (pool) {
         [req.session.userId]
       );
       if (!result.rows.length) return res.json({ authenticated: false });
-      res.json({ authenticated: true, user: result.rows[0] });
+      const tokenResult = await pool.query(
+        `SELECT 1 FROM mu_password_tokens WHERE user_id=$1 AND type='set_password'`,
+        [req.session.userId]
+      );
+      const user = result.rows[0];
+      user.needs_password_setup = tokenResult.rows.length > 0;
+      res.json({ authenticated: true, user });
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
     }
@@ -306,7 +312,7 @@ module.exports = function (pool) {
       const userId = r.rows[0].user_id;
       const hash = await bcrypt.hash(password, 12);
       await pool.query('UPDATE mu_users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, userId]);
-      await pool.query("DELETE FROM mu_password_tokens WHERE user_id = $1 AND type = 'reset_password'", [userId]);
+      await pool.query("DELETE FROM mu_password_tokens WHERE user_id = $1 AND type IN ('set_password', 'reset_password')", [userId]);
       const userResult = await pool.query(
         'SELECT id, email, display_name, current_level FROM mu_users WHERE id = $1',
         [userId]
@@ -320,6 +326,37 @@ module.exports = function (pool) {
       res.json({ user });
     } catch (err) {
       console.error('Reset-password error:', err);
+      res.status(500).json({ error: 'Something went wrong.' });
+    }
+  });
+
+  // First-time password setup for post-purchase users (authenticated, no token needed)
+  router.post('/auth/setup-password', requireAuth, sensitiveLimiter, async (req, res) => {
+    const { newPassword, password, confirm_password } = req.body;
+    const pwd = newPassword ?? password;
+    if (!pwd) return res.status(400).json({ error: 'newPassword is required.' });
+    if (pwd.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    if (confirm_password != null && pwd !== confirm_password) {
+      return res.status(400).json({ error: 'Passwords do not match.' });
+    }
+    try {
+      const tokenCheck = await pool.query(
+        `SELECT 1 FROM mu_password_tokens WHERE user_id=$1 AND type='set_password'`,
+        [req.session.userId]
+      );
+      if (!tokenCheck.rows.length) {
+        return res.status(400).json({ error: 'Password has already been set. Use change-password instead.' });
+      }
+      const hash = await bcrypt.hash(pwd, 12);
+      await pool.query('UPDATE mu_users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, req.session.userId]);
+      await pool.query("DELETE FROM mu_password_tokens WHERE user_id = $1 AND type IN ('set_password', 'reset_password')", [req.session.userId]);
+      const userResult = await pool.query(
+        'SELECT id, email, display_name, current_level, theme FROM mu_users WHERE id = $1',
+        [req.session.userId]
+      );
+      res.json({ user: userResult.rows[0] });
+    } catch (err) {
+      console.error('Setup-password error:', err);
       res.status(500).json({ error: 'Something went wrong.' });
     }
   });

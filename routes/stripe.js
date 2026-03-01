@@ -25,15 +25,24 @@ async function sendLoginEmail(userEmail, displayName, tempPassword, setPasswordT
   </div>
   <p style="margin:24px 0 0 0;font-size:14px;color:#94a3b8;">— Muscle Up Tracker</p>
 </div></body></html>`;
-  const Resend = require('resend');
+  const { Resend } = require('resend');
   const resend = new Resend(process.env.RESEND_API_KEY);
-  const { data, error } = await resend.emails.send({
-    from: process.env.RESEND_FROM,
-    to: [userEmail],
-    subject: 'Your Muscle Up Tracker login',
-    html,
-  });
-  return error ? { ok: false, error } : { ok: true };
+  try {
+    const { data, error } = await resend.emails.send({
+      from: process.env.RESEND_FROM,
+      to: [userEmail],
+      subject: 'Your Muscle Up Tracker login',
+      html,
+    });
+    if (error) {
+      console.error('sendLoginEmail Resend error:', error.message || error);
+      return { ok: false, error };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error('sendLoginEmail exception:', err.message || err);
+    return { ok: false, error: err };
+  }
 }
 
 /** Send "New purchase" notification to owner (you). Optional: set NOTIFY_EMAIL in env. */
@@ -54,15 +63,19 @@ async function sendOwnerNotificationEmail(customerEmail, customerName) {
   ${trackerUrl ? `<p style="margin:0;font-size:14px;color:#94a3b8;"><a href="${trackerUrl}" style="color:#60a5fa;">Open Muscle Up Tracker</a></p>` : ''}
   <p style="margin:24px 0 0 0;font-size:14px;color:#94a3b8;">— Muscle Up Tracker</p>
 </div></body></html>`;
-  const Resend = require('resend');
+  const { Resend } = require('resend');
   const resend = new Resend(process.env.RESEND_API_KEY);
-  const { error } = await resend.emails.send({
-    from: process.env.RESEND_FROM,
-    to: [to],
-    subject: 'New Muscle Up purchase — ' + (customerName || customerEmail),
-    html,
-  });
-  if (error) console.error('Owner notification email failed:', error.message || error);
+  try {
+    const { error } = await resend.emails.send({
+      from: process.env.RESEND_FROM,
+      to: [to],
+      subject: 'New Muscle Up purchase — ' + (customerName || customerEmail),
+      html,
+    });
+    if (error) console.error('Owner notification email failed:', error.message || error);
+  } catch (err) {
+    console.error('Owner notification email exception:', err.message || err);
+  }
 }
 
 const sensitiveLimiter = rateLimit({
@@ -202,11 +215,9 @@ module.exports = function (pool) {
 
     const hasResend = !!(process.env.RESEND_API_KEY && process.env.RESEND_FROM);
     const trackerOrigin = (process.env.TRACKER_APP_URL || process.env.TRACKER_LOGIN_URL || '').replace(/\/$/, '');
-    const handstandStyle = !temporaryPassword; // name + email only → we generate password and email link
+    const handstandStyle = !temporaryPassword;
     if (handstandStyle && (!hasResend || !trackerOrigin)) {
-      return res.status(503).json({
-        error: 'Login emails are not set up yet. Please contact support with your email and we\'ll send your Progress Tracker login details.',
-      });
+      console.warn('complete-signup: email not configured (RESEND_API_KEY/RESEND_FROM/TRACKER_APP_URL). User will need to set password in-session.');
     }
 
     try {
@@ -245,20 +256,27 @@ module.exports = function (pool) {
         const emailResult = await sendLoginEmail(userEmail, displayName, tempPassword, result.setPasswordToken);
         if (!emailResult.ok) {
           console.error('Stripe complete-signup email failed:', emailResult.error);
-          return res.status(500).json({ error: 'Account created but we could not send the login email. Please use forgot password.' });
         }
       }
       await sendOwnerNotificationEmail(userEmail, displayName);
 
-      if (handstandStyle) {
-        res.status(200).json({ success: true });
-      } else {
-        res.status(result.created ? 201 : 200).json({
-          setPasswordToken: result.setPasswordToken,
-          set_password_token: result.setPasswordToken,
-          userId: result.userId,
-        });
-      }
+      await new Promise((resolve, reject) => {
+        req.session.regenerate((err) => { if (err) reject(err); else resolve(); });
+      });
+      req.session.userId = result.userId;
+      req.session.displayName = displayName;
+
+      const userResult = await pool.query(
+        'SELECT id, email, display_name, current_level, theme FROM mu_users WHERE id=$1',
+        [result.userId]
+      );
+
+      res.status(result.created ? 201 : 200).json({
+        success: true,
+        needsPasswordSetup: true,
+        setPasswordToken: result.setPasswordToken,
+        user: userResult.rows[0],
+      });
     } catch (err) {
       if (err.message && /required|Invalid|at least 8/.test(err.message)) {
         return res.status(400).json({ error: err.message });

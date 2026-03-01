@@ -102,7 +102,7 @@ module.exports = function (pool) {
       const userId = req.session.userId;
 
       const userResult = await pool.query(
-        'SELECT id, current_level, created_at FROM muscleup_users WHERE id=$1',
+        'SELECT id, current_level, created_at FROM mu_users WHERE id=$1',
         [userId]
       );
       const user = userResult.rows[0];
@@ -123,7 +123,7 @@ module.exports = function (pool) {
         // Heatmap: daily log counts for the past 182 days
         pool.query(
           `SELECT session_date::text AS date, COUNT(*)::int AS count
-           FROM muscleup_progress_logs
+           FROM mu_progress_logs
            WHERE user_id = $1 AND session_date >= CURRENT_DATE - INTERVAL '182 days'
            GROUP BY session_date
            ORDER BY session_date`,
@@ -135,7 +135,7 @@ module.exports = function (pool) {
           `SELECT TO_CHAR(DATE_TRUNC('week', session_date), 'IYYY-"W"IW') AS week,
                   COUNT(DISTINCT session_date)::int AS sessions,
                   COALESCE(SUM(sets_completed), 0)::int AS sets
-           FROM muscleup_progress_logs
+           FROM mu_progress_logs
            WHERE user_id = $1 AND session_date >= CURRENT_DATE - INTERVAL '84 days'
            GROUP BY DATE_TRUNC('week', session_date)
            ORDER BY DATE_TRUNC('week', session_date)`,
@@ -149,7 +149,7 @@ module.exports = function (pool) {
                   hold_time_seconds AS best_hold_seconds,
                   sets_completed AS best_sets,
                   session_date::text AS achieved_at
-           FROM muscleup_progress_logs
+           FROM mu_progress_logs
            WHERE user_id = $1 AND hold_time_seconds IS NOT NULL AND hold_time_seconds > 0
            ORDER BY exercise_key, hold_time_seconds DESC, session_date DESC`,
           [userId]
@@ -158,7 +158,7 @@ module.exports = function (pool) {
         // Exercise breakdown: top 10 most practiced
         pool.query(
           `SELECT exercise_key, COUNT(*)::int AS total_logs
-           FROM muscleup_progress_logs
+           FROM mu_progress_logs
            WHERE user_id = $1
            GROUP BY exercise_key
            ORDER BY total_logs DESC
@@ -171,20 +171,20 @@ module.exports = function (pool) {
           `SELECT COUNT(*)::int AS total_logs,
                   COALESCE(SUM(sets_completed), 0)::int AS total_sets,
                   COUNT(DISTINCT session_date)::int AS total_sessions
-           FROM muscleup_progress_logs
+           FROM mu_progress_logs
            WHERE user_id = $1`,
           [userId]
         ),
 
         // Graduations for level timeline
         pool.query(
-          'SELECT level, graduated_at FROM muscleup_graduations WHERE user_id=$1 ORDER BY level',
+          'SELECT level, graduated_at FROM mu_graduations WHERE user_id=$1 ORDER BY level',
           [userId]
         ),
 
         // All distinct session dates for streak calculation (current + longest)
         pool.query(
-          'SELECT DISTINCT session_date FROM muscleup_progress_logs WHERE user_id=$1 ORDER BY session_date DESC',
+          'SELECT DISTINCT session_date FROM mu_progress_logs WHERE user_id=$1 ORDER BY session_date DESC',
           [userId]
         ),
       ]);
