@@ -324,6 +324,7 @@ module.exports = function (pool) {
               } else {
                 console.warn('Stripe webhook: user created but login email not sent (RESEND/TRACKER_APP_URL not set).');
               }
+              await sendOwnerNotificationEmail(userEmail, displayName);
             } catch (err) {
               console.error('Stripe webhook fulfillment error:', err);
               // Still return 200 so Stripe doesn't retry forever; we've logged it.
