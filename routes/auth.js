@@ -3,6 +3,7 @@ const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { requireAuth } = require('../middleware/auth');
+const { createUser } = require('../lib/createUser');
 const router = express.Router();
 
 const SET_PASSWORD_EXPIRY_HOURS = 1;
@@ -82,65 +83,17 @@ module.exports = function (pool) {
 
   // Create-user handler (landing page post-purchase)
   async function createUserHandler(req, res) {
-    const { email, name, display_name, temporaryPassword, forcePasswordChange } = req.body;
-    let displayName = (name != null ? String(name) : display_name != null ? String(display_name) : '').trim();
-    if (!email || !email.toString().trim()) {
-      return res.status(400).json({ error: 'Email is required.' });
-    }
-    if (!displayName) {
-      return res.status(400).json({ error: 'Name is required.' });
-    }
-    if (displayName.length > DISPLAY_NAME_MAX_LENGTH) {
-      displayName = displayName.slice(0, DISPLAY_NAME_MAX_LENGTH);
-    }
-    if (!temporaryPassword || typeof temporaryPassword !== 'string' || !temporaryPassword.trim()) {
-      return res.status(400).json({ error: 'temporaryPassword is required.' });
-    }
-    if (temporaryPassword.trim().length < TEMP_PASSWORD_MIN_LENGTH) {
-      return res.status(400).json({ error: 'temporaryPassword must be at least 8 characters.' });
-    }
-    const emailNorm = email.toString().trim().toLowerCase();
-    if (!EMAIL_REGEX.test(emailNorm)) {
-      return res.status(400).json({ error: 'Invalid email format.' });
-    }
-    const tempPasswordHash = await bcrypt.hash(temporaryPassword.trim(), 12);
     try {
-      const exists = await pool.query('SELECT id, email, display_name, current_level FROM mu_users WHERE email=$1', [emailNorm]);
-      const expiresAt = new Date(Date.now() + SET_PASSWORD_EXPIRY_HOURS * 60 * 60 * 1000);
-      const token = generateToken();
-
-      if (exists.rows.length) {
-        const user = exists.rows[0];
-        await pool.query(
-          'UPDATE mu_users SET display_name = $1, password_hash = $2, updated_at = NOW() WHERE id = $3',
-          [displayName, tempPasswordHash, user.id]
-        );
-        await pool.query(
-          'INSERT INTO mu_password_tokens (user_id, token_hash, type, expires_at) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, type) DO UPDATE SET token_hash=$2, expires_at=$4',
-          [user.id, hashToken(token), 'set_password', expiresAt]
-        );
-        return res.status(200).json({
-          setPasswordToken: token,
-          set_password_token: token,
-          userId: String(user.id),
-        });
-      }
-
-      const result = await pool.query(
-        'INSERT INTO mu_users (email, password_hash, display_name) VALUES ($1,$2,$3) RETURNING id, email, display_name, current_level',
-        [emailNorm, tempPasswordHash, displayName]
-      );
-      const user = result.rows[0];
-      await pool.query(
-        'INSERT INTO mu_password_tokens (user_id, token_hash, type, expires_at) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, type) DO UPDATE SET token_hash=$2, expires_at=$4',
-        [user.id, hashToken(token), 'set_password', expiresAt]
-      );
-      res.status(201).json({
-        setPasswordToken: token,
-        set_password_token: token,
-        userId: String(user.id),
+      const result = await createUser(pool, req.body);
+      res.status(result.created ? 201 : 200).json({
+        setPasswordToken: result.setPasswordToken,
+        set_password_token: result.setPasswordToken,
+        userId: result.userId,
       });
     } catch (err) {
+      if (err.message && /required|Invalid|at least 8/.test(err.message)) {
+        return res.status(400).json({ error: err.message });
+      }
       console.error('Create-user error:', err);
       res.status(500).json({ error: 'Something went wrong.' });
     }

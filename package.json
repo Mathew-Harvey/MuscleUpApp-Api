@@ -23,7 +23,8 @@
     "express-rate-limit": "^8.2.1",
     "express-session": "^1.18.0",
     "pg": "^8.13.0",
-    "resend": "^4.8.0"
+    "resend": "^4.8.0",
+    "stripe": "^20.4.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",

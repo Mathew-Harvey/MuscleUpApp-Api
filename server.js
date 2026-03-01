@@ -59,6 +59,10 @@ app.use(cors({
   credentials: true,
 }));
 
+// Stripe webhook must receive raw body for signature verification
+const stripeRoutes = require('./routes/stripe')(pool);
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeRoutes.webhookHandler);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -79,6 +83,7 @@ app.use(session({
 // Routes — all under /api
 app.use('/api', require('./routes/auth')(pool));
 app.use('/api', require('./routes/progress')(pool));
+app.use('/api', stripeRoutes.router);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

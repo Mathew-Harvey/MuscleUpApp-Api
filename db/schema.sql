@@ -59,3 +59,10 @@ CREATE TABLE IF NOT EXISTS mu_password_tokens (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mu_password_tokens_user_type ON mu_password_tokens (user_id, type);
 CREATE INDEX IF NOT EXISTS idx_mu_password_tokens_expires ON mu_password_tokens(expires_at);
+
+-- Stripe: one row per fulfilled Checkout Session (prevents reusing a session for signup)
+CREATE TABLE IF NOT EXISTS mu_stripe_fulfillments (
+  checkout_session_id VARCHAR(255) NOT NULL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES mu_users(id) ON DELETE CASCADE,
+  fulfilled_at TIMESTAMPTZ DEFAULT NOW()
+);
