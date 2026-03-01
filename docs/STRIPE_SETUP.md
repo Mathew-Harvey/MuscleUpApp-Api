@@ -78,10 +78,10 @@ Same flow as Handstand: success page verifies session, shows form (name + email 
 2. User enters **name** and **email** (no password on the form).
 3. Frontend calls **`POST /api/stripe/complete-signup`** with body: `{ session_id` or `sessionId`, `name`, `email` }.
 4. API:
-   - Verifies the Stripe session is paid, creates the user, generates a temporary password, and **sends an email** (Resend) with a "Set your password & log in" link. Returns **`{ success: true }`**.
+   - Verifies the Stripe session is paid, creates the user, generates a temporary password, and **sends an email** (Resend) with a "Set your password & log in" link. If **NOTIFY_EMAIL** (or **OWNER_EMAIL**) is set, you also get a "New Muscle Up purchase" email with the customer’s name and email. Returns **`{ success: true }`**.
 5. User checks email, clicks the link → tracker app `/set-password?token=...` → sets password and is logged in.
 
-Requires **RESEND_API_KEY**, **RESEND_FROM**, and **TRACKER_APP_URL** (or **TRACKER_LOGIN_URL**) in the API env. Optional: if the frontend sends **`temporaryPassword`** in the body, the API skips sending the email and returns **`set_password_token`**.
+Requires **RESEND_API_KEY**, **RESEND_FROM**, and **TRACKER_APP_URL** (or **TRACKER_LOGIN_URL**) in the API env. Set **NOTIFY_EMAIL** to your own address to receive a notification on each new purchase/signup. Optional: if the frontend sends **`temporaryPassword`** in the body, the API skips sending the email and returns **`set_password_token`**.
 
 ---
 
@@ -89,6 +89,7 @@ Requires **RESEND_API_KEY**, **RESEND_FROM**, and **TRACKER_APP_URL** (or **TRAC
 
 Webhooks are used to:
 
+- **Send the invite email automatically** — When Stripe sends `checkout.session.completed` (or `checkout.session.async_payment_succeeded`), the API creates the user and sends the “Your Muscle Up Tracker login” email. So the buyer gets the invite even if they never visit the thank-you page (same behaviour as the Handstand app).
 - Fulfill orders reliably (even if the user closes the browser before hitting your success page).
 - Handle delayed payment methods (e.g. bank debits) via `checkout.session.async_payment_succeeded`.
 
@@ -119,6 +120,8 @@ STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxx
 
 The API uses this secret to verify that incoming webhook requests really come from Stripe.
 
+For webhook-triggered invite emails to work, the same env as complete-signup is required: **RESEND_API_KEY**, **RESEND_FROM**, and **TRACKER_APP_URL** (or **TRACKER_LOGIN_URL**). Stripe Checkout must collect the customer’s email (default).
+
 ---
 
 ## 6. Environment variables summary
@@ -131,6 +134,7 @@ The API uses this secret to verify that incoming webhook requests really come fr
 | `STRIPE_WEBHOOK_SECRET` | Yes for webhooks | Signing secret from Webhooks dashboard or `stripe listen`. |
 | `STRIPE_SUCCESS_URL` | Yes for checkout | Where to send the user after payment (must include `{CHECKOUT_SESSION_ID}`). |
 | `STRIPE_CANCEL_URL` | Optional | Where to send the user if they cancel (e.g. `https://yoursite.com/#buy`). |
+| `NOTIFY_EMAIL` or `OWNER_EMAIL` | Optional | Your email; you get a “New Muscle Up purchase” notification when someone completes signup after buying (same Resend config as customer emails). |
 
 If both `STRIPE_PRICE_ID` and `STRIPE_PRODUCT_ID` are set, `STRIPE_PRICE_ID` is used.
 

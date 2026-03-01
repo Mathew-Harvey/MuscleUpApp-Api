@@ -6,6 +6,65 @@ const { createUser } = require('../lib/createUser');
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
+/** Send "Your Muscle Up Tracker is ready" login email. Requires RESEND_API_KEY, RESEND_FROM, TRACKER_APP_URL. */
+async function sendLoginEmail(userEmail, displayName, tempPassword, setPasswordToken) {
+  const trackerOrigin = (process.env.TRACKER_APP_URL || process.env.TRACKER_LOGIN_URL || '').replace(/\/$/, '');
+  if (!trackerOrigin || !process.env.RESEND_API_KEY || !process.env.RESEND_FROM) return { ok: false };
+  const loginLink = trackerOrigin + '/set-password?token=' + encodeURIComponent(setPasswordToken);
+  const escapedName = (displayName || 'Customer').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const escapedEmail = (userEmail || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0a0f1a;color:#e2e8f0;padding:40px;">
+<div style="max-width:520px;margin:0 auto;background:#161d2f;border-radius:8px;padding:32px;">
+  <h1 style="margin:0 0 16px 0;font-size:24px;">Your Muscle Up Tracker is ready</h1>
+  <p style="margin:0 0 24px 0;">Hi ${escapedName},</p>
+  <p style="margin:0 0 24px 0;">Use the button below to open the Progress Tracker. You'll log in with your email and the temporary password below, then set a new password on first sign-in.</p>
+  <p style="margin:0 0 24px 0;"><a href="${loginLink}" style="display:inline-block;padding:14px 28px;background:#2d8bc9;color:#fff;text-decoration:none;border-radius:4px;font-weight:700;">Set your password &amp; log in</a></p>
+  <div style="background:rgba(45,139,201,0.1);border-radius:4px;padding:20px;margin:24px 0;">
+    <p style="margin:0 0 4px 0;"><strong>Email:</strong> ${escapedEmail}</p>
+    <p style="margin:0;"><strong>Temporary password:</strong> <code style="background:rgba(0,0,0,0.2);padding:2px 8px;">${tempPassword}</code></p>
+  </div>
+  <p style="margin:24px 0 0 0;font-size:14px;color:#94a3b8;">— Muscle Up Tracker</p>
+</div></body></html>`;
+  const Resend = require('resend');
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const { data, error } = await resend.emails.send({
+    from: process.env.RESEND_FROM,
+    to: [userEmail],
+    subject: 'Your Muscle Up Tracker login',
+    html,
+  });
+  return error ? { ok: false, error } : { ok: true };
+}
+
+/** Send "New purchase" notification to owner (you). Optional: set NOTIFY_EMAIL in env. */
+async function sendOwnerNotificationEmail(customerEmail, customerName) {
+  const to = (process.env.NOTIFY_EMAIL || process.env.OWNER_EMAIL || '').toString().trim();
+  if (!to || !process.env.RESEND_API_KEY || !process.env.RESEND_FROM) return;
+  const escapedName = (customerName || 'Customer').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const escapedEmail = (customerEmail || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const trackerUrl = (process.env.TRACKER_APP_URL || process.env.TRACKER_LOGIN_URL || '').replace(/\/$/, '');
+  const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0a0f1a;color:#e2e8f0;padding:40px;">
+<div style="max-width:520px;margin:0 auto;background:#161d2f;border-radius:8px;padding:32px;">
+  <h1 style="margin:0 0 16px 0;font-size:24px;">New Muscle Up purchase</h1>
+  <p style="margin:0 0 24px 0;">Someone just bought the Muscle Up ebook and signed up for the tracker.</p>
+  <div style="background:rgba(45,139,201,0.1);border-radius:4px;padding:20px;margin:24px 0;">
+    <p style="margin:0 0 4px 0;"><strong>Name:</strong> ${escapedName}</p>
+    <p style="margin:0;"><strong>Email:</strong> ${escapedEmail}</p>
+  </div>
+  ${trackerUrl ? `<p style="margin:0;font-size:14px;color:#94a3b8;"><a href="${trackerUrl}" style="color:#60a5fa;">Open Muscle Up Tracker</a></p>` : ''}
+  <p style="margin:24px 0 0 0;font-size:14px;color:#94a3b8;">— Muscle Up Tracker</p>
+</div></body></html>`;
+  const Resend = require('resend');
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const { error } = await resend.emails.send({
+    from: process.env.RESEND_FROM,
+    to: [to],
+    subject: 'New Muscle Up purchase — ' + (customerName || customerEmail),
+    html,
+  });
+  if (error) console.error('Owner notification email failed:', error.message || error);
+}
+
 const sensitiveLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
@@ -183,34 +242,13 @@ module.exports = function (pool) {
       );
 
       if (handstandStyle) {
-        const loginLink = trackerOrigin + '/set-password?token=' + encodeURIComponent(result.setPasswordToken);
-        const { Resend } = require('resend');
-        const resend = new Resend(process.env.RESEND_API_KEY);
-        const escapedName = displayName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const escapedEmail = userEmail.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0a0f1a;color:#e2e8f0;padding:40px;">
-<div style="max-width:520px;margin:0 auto;background:#161d2f;border-radius:8px;padding:32px;">
-  <h1 style="margin:0 0 16px 0;font-size:24px;">Your Muscle Up Tracker is ready</h1>
-  <p style="margin:0 0 24px 0;">Hi ${escapedName},</p>
-  <p style="margin:0 0 24px 0;">Use the button below to open the Progress Tracker. You'll log in with your email and the temporary password below, then set a new password on first sign-in.</p>
-  <p style="margin:0 0 24px 0;"><a href="${loginLink}" style="display:inline-block;padding:14px 28px;background:#2d8bc9;color:#fff;text-decoration:none;border-radius:4px;font-weight:700;">Set your password &amp; log in</a></p>
-  <div style="background:rgba(45,139,201,0.1);border-radius:4px;padding:20px;margin:24px 0;">
-    <p style="margin:0 0 4px 0;"><strong>Email:</strong> ${escapedEmail}</p>
-    <p style="margin:0;"><strong>Temporary password:</strong> <code style="background:rgba(0,0,0,0.2);padding:2px 8px;">${tempPassword}</code></p>
-  </div>
-  <p style="margin:24px 0 0 0;font-size:14px;color:#94a3b8;">— Muscle Up Tracker</p>
-</div></body></html>`;
-        const { data, error } = await resend.emails.send({
-          from: process.env.RESEND_FROM,
-          to: [userEmail],
-          subject: 'Your Muscle Up Tracker login',
-          html,
-        });
-        if (error) {
-          console.error('Stripe complete-signup email failed:', error);
+        const emailResult = await sendLoginEmail(userEmail, displayName, tempPassword, result.setPasswordToken);
+        if (!emailResult.ok) {
+          console.error('Stripe complete-signup email failed:', emailResult.error);
           return res.status(500).json({ error: 'Account created but we could not send the login email. Please use forgot password.' });
         }
       }
+      await sendOwnerNotificationEmail(userEmail, displayName);
 
       if (handstandStyle) {
         res.status(200).json({ success: true });
@@ -234,7 +272,7 @@ module.exports = function (pool) {
   });
 
   // Webhook handler — must be called with raw body (see server.js)
-  function webhookHandler(req, res) {
+  async function webhookHandler(req, res) {
     const sig = req.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!webhookSecret) {
@@ -252,16 +290,47 @@ module.exports = function (pool) {
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    switch (event.type) {
-      case 'checkout.session.completed':
-      case 'checkout.session.async_payment_succeeded':
-        // Fulfillment is done when the user hits complete-signup; we just acknowledge.
-        break;
-      case 'checkout.session.async_payment_failed':
-        // Optional: notify customer
-        break;
-      default:
-        break;
+    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+      const session = event.data.object;
+      if (session.payment_status === 'paid') {
+        const sessionId = session.id;
+        const existing = await pool.query(
+          'SELECT user_id FROM mu_stripe_fulfillments WHERE checkout_session_id = $1',
+          [sessionId]
+        );
+        if (existing.rows.length === 0) {
+          const fullSession = await stripe.checkout.sessions.retrieve(sessionId, { expand: ['customer_details'] });
+          const userEmail = (fullSession.customer_details?.email || fullSession.customer_email || '').toString().trim().toLowerCase();
+          if (userEmail) {
+            const hasResend = !!(process.env.RESEND_API_KEY && process.env.RESEND_FROM);
+            const trackerOrigin = (process.env.TRACKER_APP_URL || process.env.TRACKER_LOGIN_URL || '').replace(/\/$/, '');
+            const displayName = (fullSession.customer_details?.name || 'Customer').toString().trim().slice(0, 100) || 'Customer';
+            const tempPassword = crypto.randomBytes(12).toString('base64').replace(/[+/=]/g, '').slice(0, 12);
+            try {
+              const result = await createUser(pool, {
+                email: userEmail,
+                name: displayName,
+                temporaryPassword: tempPassword,
+              });
+              await pool.query(
+                'INSERT INTO mu_stripe_fulfillments (checkout_session_id, user_id) VALUES ($1, $2)',
+                [sessionId, result.userId]
+              );
+              if (hasResend && trackerOrigin) {
+                const emailResult = await sendLoginEmail(userEmail, displayName, tempPassword, result.setPasswordToken);
+                if (!emailResult.ok) {
+                  console.error('Stripe webhook: login email failed for', userEmail, emailResult.error);
+                }
+              } else {
+                console.warn('Stripe webhook: user created but login email not sent (RESEND/TRACKER_APP_URL not set).');
+              }
+            } catch (err) {
+              console.error('Stripe webhook fulfillment error:', err);
+              // Still return 200 so Stripe doesn't retry forever; we've logged it.
+            }
+          }
+        }
+      }
     }
 
     res.json({ received: true });
